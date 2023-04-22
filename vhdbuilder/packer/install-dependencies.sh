@@ -43,6 +43,9 @@ EOF
 fi
 
 installDeps
+if [[ "${UBUNTU_RELEASE}" == "18.04" ]]; then
+  install1804EsmUpdates
+fi
 
 tee -a /etc/systemd/journald.conf > /dev/null <<'EOF'
 Storage=persistent
