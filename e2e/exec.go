@@ -56,7 +56,7 @@ func (r podExecResult) dumpStderr() {
 }
 
 func extractLogsFromVM(ctx context.Context, t *testing.T, vmssName string, sshPrivateKey string, opts *scenarioRunOpts) (map[string]string, error) {
-	privateIP, err := getVMPrivateIPAddress(ctx, opts.cloud, opts.suiteConfig.subscription, *opts.chosenCluster.Properties.NodeResourceGroup, vmssName)
+	privateIP, err := getVMPrivateIPAddress(ctx, opts.cloud, opts.suiteConfig.subscription, *opts.clusterConfig.cluster.Properties.NodeResourceGroup, vmssName)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get private IP address of VM on VMSS %q: %w", vmssName, err)
 	}
@@ -66,7 +66,7 @@ func extractLogsFromVM(ctx context.Context, t *testing.T, vmssName string, sshPr
 		"kubelet.log":                          "journalctl -u kubelet",
 	}
 
-	podName, err := getDebugPodName(opts.kube)
+	podName, err := getDebugPodName(opts.clusterConfig.kube)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get debug pod name: %w", err)
 	}
@@ -75,7 +75,7 @@ func extractLogsFromVM(ctx context.Context, t *testing.T, vmssName string, sshPr
 	for file, sourceCmd := range commandList {
 		t.Logf("executing command on remote VM at %s of VMSS %s: %q", privateIP, vmssName, sourceCmd)
 
-		execResult, err := execOnVM(ctx, opts.kube, privateIP, podName, sshPrivateKey, sourceCmd)
+		execResult, err := execOnVM(ctx, opts.clusterConfig.kube, privateIP, podName, sshPrivateKey, sourceCmd)
 		if execResult != nil {
 			execResult.dumpStderr()
 		}

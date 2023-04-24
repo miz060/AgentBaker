@@ -15,8 +15,8 @@ import (
 const (
 	// Polling intervals
 	execOnVMPollInterval                 = 10 * time.Second
-	extractClusterParametersPollInterval = 15 * time.Second
-	extractVMLogsPollInterval            = 15 * time.Second
+	extractClusterParametersPollInterval = 10 * time.Second
+	extractVMLogsPollInterval            = 10 * time.Second
 	waitUntilPodRunningPollInterval      = 5 * time.Second
 	waitUntilPodDeletedPollInterval      = 5 * time.Second
 

@@ -11,12 +11,12 @@ import (
 )
 
 func runLiveVMValidators(ctx context.Context, t *testing.T, vmssName, sshPrivateKey string, opts *scenarioRunOpts) error {
-	privateIP, err := getVMPrivateIPAddress(ctx, opts.cloud, opts.suiteConfig.subscription, *opts.chosenCluster.Properties.NodeResourceGroup, vmssName)
+	privateIP, err := getVMPrivateIPAddress(ctx, opts.cloud, opts.suiteConfig.subscription, *opts.clusterConfig.cluster.Properties.NodeResourceGroup, vmssName)
 	if err != nil {
 		return fmt.Errorf("unable to get private IP address of VM on VMSS %q: %w", vmssName, err)
 	}
 
-	podName, err := getDebugPodName(opts.kube)
+	podName, err := getDebugPodName(opts.clusterConfig.kube)
 	if err != nil {
 		return fmt.Errorf("unable to get debug pod name: %w", err)
 	}
@@ -31,7 +31,7 @@ func runLiveVMValidators(ctx context.Context, t *testing.T, vmssName, sshPrivate
 		command := validator.Command
 		log.Printf("running live VM validator: %q", desc)
 
-		execResult, err := pollExecOnVM(ctx, opts.kube, privateIP, podName, sshPrivateKey, command)
+		execResult, err := pollExecOnVM(ctx, opts.clusterConfig.kube, privateIP, podName, sshPrivateKey, command)
 		if err != nil {
 			return fmt.Errorf("unable to execute validator command %q: %w", command, err)
 		}

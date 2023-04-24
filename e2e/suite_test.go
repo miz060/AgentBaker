@@ -46,26 +46,26 @@ func Test_All(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	clusters, err := listClusters(ctx, t, cloud, suiteConfig.resourceGroupName)
+	clusterConfigs, err := getInitialClusterConfigs(ctx, t, cloud, suiteConfig.resourceGroupName)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := createMissingClusters(ctx, r, cloud, suiteConfig, scenarios, &clusters); err != nil {
+	paramCache := parameterCache{}
+
+	if err := createMissingClusters(ctx, t, r, cloud, suiteConfig, scenarios, paramCache, &clusterConfigs); err != nil {
 		t.Fatal(err)
 	}
-
-	paramCache := paramCache{}
 
 	for _, scenario := range scenarios {
 		scenario := scenario
 
-		kube, cluster, clusterParams, subnetID := mustChooseCluster(ctx, t, r, cloud, suiteConfig, scenario, clusters, paramCache)
+		chosenConfig := mustChooseCluster(ctx, t, r, cloud, suiteConfig, scenario, paramCache, clusterConfigs)
 
-		clusterName := *cluster.Name
+		clusterName := *chosenConfig.cluster.Name
 		t.Logf("chose cluster: %q", clusterName)
 
-		baseConfig, err := getBaseNodeBootstrappingConfiguration(ctx, t, cloud, suiteConfig, clusterParams)
+		baseConfig, err := getBaseNodeBootstrappingConfiguration(ctx, t, cloud, suiteConfig, chosenConfig.parameters)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -90,13 +90,11 @@ func Test_All(t *testing.T) {
 			}
 
 			opts := &scenarioRunOpts{
+				clusterConfig: chosenConfig,
 				cloud:         cloud,
-				kube:          kube,
 				suiteConfig:   suiteConfig,
 				scenario:      scenario,
-				chosenCluster: cluster,
 				nbc:           nbc,
-				subnetID:      subnetID,
 				loggingDir:    caseLogsDir,
 			}
 
@@ -146,7 +144,7 @@ func runScenario(ctx context.Context, t *testing.T, r *mrand.Rand, opts *scenari
 	// Only perform node readiness/pod-related checks when VMSS creation succeeded
 	if vmssSucceeded {
 		t.Log("vmss creation succeded, proceeding with node readiness and pod checks...")
-		if err = validateNodeHealth(ctx, t, opts.kube, vmssName); err != nil {
+		if err = validateNodeHealth(ctx, t, opts.clusterConfig.kube, vmssName); err != nil {
 			t.Fatal(err)
 		}
 
@@ -173,7 +171,7 @@ func bootstrapVMSS(ctx context.Context, t *testing.T, r *mrand.Rand, opts *scena
 
 	cleanupVMSS := func() {
 		t.Log("deleting vmss", vmssName)
-		poller, err := opts.cloud.vmssClient.BeginDelete(ctx, *opts.chosenCluster.Properties.NodeResourceGroup, vmssName, nil)
+		poller, err := opts.cloud.vmssClient.BeginDelete(ctx, *opts.clusterConfig.cluster.Properties.NodeResourceGroup, vmssName, nil)
 		if err != nil {
 			t.Error("error deleting vmss", vmssName, err)
 			return
