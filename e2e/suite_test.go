@@ -35,7 +35,7 @@ func Test_All(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scenarioTable := scenario.InitScenarioTable(t, suiteConfig.scenariosToRun)
+	scenarios := scenario.InitScenarioTable(t, suiteConfig.scenariosToRun)
 
 	cloud, err := newAzureClient(suiteConfig.subscription)
 	if err != nil {
@@ -51,12 +51,16 @@ func Test_All(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if err := createMissingClusters(ctx, r, cloud, suiteConfig, scenarios, &clusters); err != nil {
+		t.Fatal(err)
+	}
+
 	paramCache := paramCache{}
 
-	for _, scenario := range scenarioTable {
+	for _, scenario := range scenarios {
 		scenario := scenario
 
-		kube, cluster, clusterParams, subnetID := mustChooseCluster(ctx, t, r, cloud, suiteConfig, scenario, &clusters, paramCache)
+		kube, cluster, clusterParams, subnetID := mustChooseCluster(ctx, t, r, cloud, suiteConfig, scenario, clusters, paramCache)
 
 		clusterName := *cluster.Name
 		t.Logf("chose cluster: %q", clusterName)
