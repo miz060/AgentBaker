@@ -19,20 +19,6 @@ const (
 	managedClusterResourceType = "Microsoft.ContainerService/managedClusters"
 )
 
-type clusterCreationErrors []error
-
-func (errs clusterCreationErrors) Error() string {
-	if len(errs) == 1 {
-		return errs[0].Error()
-	}
-
-	msg := "encountered multiple cluster creation errors:"
-	for _, err := range errs {
-		msg += fmt.Sprintf("\n%s", err.Error())
-	}
-	return msg
-}
-
 type parameters map[string]string
 
 type parameterCache map[string]parameters
@@ -401,7 +387,7 @@ func getClusterParametersWithCache(
 	t *testing.T,
 	kube *kubeclient,
 	clusterName string,
-	paramCache parameterCache) (map[string]string, error) {
+	paramCache parameterCache) (parameters, error) {
 	cachedParams, ok := paramCache[clusterName]
 	if !ok {
 		params, err := pollExtractClusterParameters(ctx, t, kube)
