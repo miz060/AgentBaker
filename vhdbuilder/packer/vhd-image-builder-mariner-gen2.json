@@ -267,13 +267,8 @@
     },
     {
       "type": "file",
-      "source": "parts/linux/cloud-init/artifacts/sshd_config",
+      "source": "parts/linux/cloud-init/artifacts/mariner/sshd_config",
       "destination": "/home/packer/sshd_config"
-    },
-    {
-      "type": "file",
-      "source": "parts/linux/cloud-init/artifacts/sshd_config_1604",
-      "destination": "/home/packer/sshd_config_1604"
     },
     {
       "type": "file",
