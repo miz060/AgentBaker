@@ -818,6 +818,45 @@ testLtsKernel() {
 
 }
 
+testAzureLinuxArm64DualKernel() {
+  local test="testAzureLinuxArm64DualKernel"
+  local os_version=$1
+  local os_sku=$2
+
+  echo "$test:Start"
+  if [ "$os_sku" != "AzureLinux" ] || [ "$os_version" != "3.0" ] || [ "$(getCPUArch)" != "arm64" ]; then
+    echo "$test: Skipping for non-AzureLinux 3 ARM64 image"
+    return
+  fi
+
+  for kernel_package in kernel kernel-hwe; do
+    if ! rpm -q "$kernel_package" >/dev/null 2>&1; then
+      err "$test" "$kernel_package is not installed"
+      continue
+    fi
+    if ! rpm -ql "$kernel_package" | grep -q '^/boot/vmlinuz-'; then
+      err "$test" "$kernel_package does not provide a bootable kernel"
+    fi
+  done
+
+  if [ ! -x /etc/grub.d/10_azure_nvidia ]; then
+    err "$test" "/etc/grub.d/10_azure_nvidia is missing or not executable"
+  fi
+  if [ ! -f /etc/default/grub.d/51-azure-nvidia.cfg ]; then
+    err "$test" "/etc/default/grub.d/51-azure-nvidia.cfg is missing"
+  fi
+  if ! grep -q 'smbios --type 4 --get-string 7 --set cpu_manufacturer' /boot/grub2/grub.cfg; then
+    err "$test" "generated grub.cfg does not contain NVIDIA SMBIOS detection"
+  fi
+
+  local running_kernel_package
+  running_kernel_package=$(rpm -qf --queryformat '%{NAME}' "/boot/vmlinuz-$(uname -r)" 2>/dev/null || true)
+  if [ "$running_kernel_package" != "kernel" ]; then
+    err "$test" "standard ARM64 test VM booted $running_kernel_package instead of kernel"
+  fi
+  echo "$test:Finish"
+}
+
 # Parse loginctl sessions to find console autologin sessions
 # Console autologin sessions have Remote=no and Service=login
 # Returns: Space-separated list of autologin session IDs
@@ -2708,6 +2747,7 @@ testAKSNodeControllerBinary
 testAKSNodeControllerVersion
 testAKSNodeControllerService
 testLtsKernel $OS_VERSION $OS_SKU $ENABLE_FIPS
+testAzureLinuxArm64DualKernel "$OS_VERSION" "$OS_SKU"
 testAutologinDisabled $OS_SKU
 testCorednsBinaryExtractedAndCached $OS_VERSION
 checkLocaldnsScriptsAndConfigs $OS_SKU

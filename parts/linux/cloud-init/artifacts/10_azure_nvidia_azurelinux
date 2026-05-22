@@ -1,0 +1,49 @@
+#!/bin/sh
+
+set -e
+
+BOOT_DIR="${BOOT_DIR:-/boot}"
+GRUB_CONFIG="${GRUB_CONFIG:-${BOOT_DIR}/grub2/grub.cfg}"
+
+HWE=
+STANDARD=
+
+for linux in "${BOOT_DIR}"/vmlinuz-*; do
+	[ -f "$linux" ] || continue
+	version="${linux##*/}"
+	version="${version#vmlinuz-}"
+	package=$(rpm -qf --queryformat '%{NAME}' "$linux" 2>/dev/null || true)
+
+	case $package in
+		kernel-hwe) HWE=$(printf '%s\n%s\n' "$HWE" "$version" | sed '/^$/d' | sort -V | tail -n1) ;;
+		kernel) STANDARD=$(printf '%s\n%s\n' "$STANDARD" "$version" | sed '/^$/d' | sort -V | tail -n1) ;;
+		*) echo "Ignoring $linux owned by ${package:-no RPM}" >&2 ;;
+	esac
+done
+
+if [ -z "${HWE}" ] || [ -z "${STANDARD}" ]; then
+	echo "Only one kernel variant (HWE or standard) found" >&2
+	exit 0
+fi
+
+# Get boot_device_id (root partition UUID) from existing grub.cfg menuentry IDs.
+boot_device_id=$(grep -m1 -o 'gnulinux-[^"]*-advanced-[a-f0-9-]*' "${GRUB_CONFIG}" 2>/dev/null | sed 's/.*-advanced-//')
+
+if [ -z "$boot_device_id" ]; then
+	echo "Could not determine boot_device_id from ${GRUB_CONFIG}" >&2
+	exit 0
+fi
+
+echo "Default HWE: ${HWE}, standard: ${STANDARD}, boot_device_id: ${boot_device_id}" >&2
+
+cat << EOF
+insmod smbios
+smbios --type 4 --get-string 7 --set cpu_manufacturer
+
+if [ x\$cpu_manufacturer = xNVIDIA ]; then
+	set default="gnulinux-${HWE}-advanced-${boot_device_id}"
+	set nvidia_args="iommu.passthrough=1 irqchip.gicv3_nolpi=y arm_smmu_v3.disable_msipolling=1"
+else
+	set default="gnulinux-${STANDARD}-advanced-${boot_device_id}"
+fi
+EOF

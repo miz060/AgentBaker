@@ -172,6 +172,45 @@ if isMarinerOrAzureLinux "$OS" && [ "$OS_VERSION" = "3.0" ]; then
 fi
 capture_benchmark "${SCRIPT_NAME}_disable_kernel_lockdown_cmdline"
 
+# Install kernel-hwe alongside standard kernel for AzureLinux 3 ARM64 dual-boot.
+# This enables GRUB SMBIOS-based kernel selection for NVIDIA Grace (GB200/GB300) VMs.
+if isMarinerOrAzureLinux "$OS" && [ "${OS_VERSION}" = "3.0" ] && [ "${CPU_ARCH}" = "arm64" ]; then
+  if rpm -q kernel-hwe &>/dev/null; then
+    echo "ARM64 AzureLinux: kernel-hwe is already installed"
+  elif tdnf list available kernel-hwe &>/dev/null; then
+    echo "ARM64 AzureLinux: installing kernel-hwe alongside standard kernel for dual-boot"
+    # kernel.spec declares Conflicts: kernel-hwe, but the packages have no file
+    # overlaps. tdnf hard-fails on Conflicts (--skipconflicts is check-only).
+    # Use dnf5 which resolves Conflicts via reinstall of the conflicting package.
+    dnf5_was_installed=false
+    if rpm -q dnf5 &>/dev/null; then
+      dnf5_was_installed=true
+    else
+      dnf_install 30 1 600 dnf5
+    fi
+    dnf5 install -y kernel-hwe || exit "$ERR_APT_INSTALL_TIMEOUT"
+    if ! $dnf5_was_installed; then
+      tdnf remove -y dnf5 || true
+      for pkg in libdnf5-cli libdnf5 bash-completion-devel bash-completion fmt; do
+        rpm -q "$pkg" &>/dev/null && rpm -q --whatrequires "$pkg" 2>&1 | grep -q "no package" && tdnf remove -y "$pkg" || true
+      done
+    fi
+  else
+    echo "ARM64 AzureLinux: kernel-hwe is unavailable" >&2
+    exit "$ERR_APT_INSTALL_TIMEOUT"
+  fi
+
+  for kernel_package in kernel kernel-hwe; do
+    if ! rpm -q "$kernel_package" &>/dev/null || ! rpm -ql "$kernel_package" | grep -q '^/boot/vmlinuz-'; then
+      echo "ARM64 AzureLinux: $kernel_package does not provide a bootable kernel" >&2
+      exit "$ERR_APT_INSTALL_TIMEOUT"
+    fi
+  done
+  echo "After dual kernel install:"
+  rpm -qa | grep -E "^kernel" | sort
+fi
+capture_benchmark "${SCRIPT_NAME}_install_kernel_hwe_arm64"
+
 # shellcheck disable=SC3010
 if [[ ${UBUNTU_RELEASE//./} -ge 2204 && "${ENABLE_FIPS,,}" != "true" ]]; then
 
