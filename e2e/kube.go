@@ -166,7 +166,7 @@ func (k *Kubeclient) WaitUntilPodRunning(ctx context.Context, namespace string, 
 	return pod, err
 }
 
-func (k *Kubeclient) WaitUntilNodeReady(ctx context.Context, t testing.TB, vmssName string) string {
+func (k *Kubeclient) WaitUntilNodeReady(ctx context.Context, t testing.TB, vmssName string) (string, error) {
 	defer toolkit.LogStepf(t, "waiting for node %s to be ready", vmssName)()
 	var lastNode *corev1.Node
 
@@ -202,15 +202,13 @@ func (k *Kubeclient) WaitUntilNodeReady(ctx context.Context, t testing.TB, vmssN
 
 	if err != nil {
 		if lastNode == nil {
-			t.Fatalf("%q haven't appeared in k8s API server: %v", vmssName, err)
-			return ""
+			return "", fmt.Errorf("%q did not appear in the Kubernetes API server: %w", vmssName, err)
 		}
 		nodeString, _ := json.Marshal(lastNode)
-		t.Fatalf("failed to wait for %q (%s) to be ready %+v. Detail: %s", vmssName, lastNode.Name, lastNode.Status, string(nodeString))
-		return ""
+		return "", fmt.Errorf("failed to wait for %q (%s) to be ready: %w; status=%+v detail=%s", vmssName, lastNode.Name, err, lastNode.Status, string(nodeString))
 	}
 
-	return lastNode.Name
+	return lastNode.Name, nil
 }
 
 // GetPodNetworkDebugPodForNode returns a pod that's a member of the 'debugnonhost' daemonset running in the cluster - this will return
@@ -873,7 +871,7 @@ func (k *Kubeclient) logProxyTimeoutDiagnostics(ctx context.Context, lastPodStat
 	}
 }
 
-func getClusterSubnetID(ctx context.Context, cluster *armcontainerservice.ManagedCluster) (string, error) {
+func getClusterSubnetID(cluster *armcontainerservice.ManagedCluster) (string, error) {
 	for _, pool := range cluster.Properties.AgentPoolProfiles {
 		if pool.VnetSubnetID != nil && *pool.VnetSubnetID != "" {
 			return *pool.VnetSubnetID, nil
