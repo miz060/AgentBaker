@@ -3,7 +3,7 @@
 set -e
 
 BOOT_DIR="${BOOT_DIR:-/boot}"
-GRUB_CONFIG="${GRUB_CONFIG:-${BOOT_DIR}/grub2/grub.cfg}"
+GRUB_LINUX_SCRIPT="${GRUB_LINUX_SCRIPT:-/etc/grub.d/10_linux}"
 
 HWE=
 STANDARD=
@@ -26,11 +26,18 @@ if [ -z "${HWE}" ] || [ -z "${STANDARD}" ]; then
 	exit 0
 fi
 
-# Get boot_device_id (root partition UUID) from existing grub.cfg menuentry IDs.
-boot_device_id=$(grep -m1 -o 'gnulinux-[^"]*-advanced-[a-f0-9-]*' "${GRUB_CONFIG}" 2>/dev/null | sed 's/.*-advanced-//')
+# AzureLinux's 10_linux computes the menuentry suffix with
+# grub_get_device_id. Source it so this script uses the same ID during the
+# current grub2-mkconfig run instead of parsing a stale grub.cfg.
+boot_device_id=
+if [ -r "${GRUB_LINUX_SCRIPT}" ]; then
+	# shellcheck source=/etc/grub.d/10_linux
+	# shellcheck disable=SC1091
+	. "${GRUB_LINUX_SCRIPT}" >/dev/null 2>&1
+fi
 
-if [ -z "$boot_device_id" ]; then
-	echo "Could not determine boot_device_id from ${GRUB_CONFIG}" >&2
+if [ -z "${boot_device_id}" ]; then
+	echo "Could not determine boot_device_id from ${GRUB_LINUX_SCRIPT}" >&2
 	exit 0
 fi
 

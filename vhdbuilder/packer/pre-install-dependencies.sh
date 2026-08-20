@@ -207,6 +207,7 @@ if isMarinerOrAzureLinux "$OS" && [ "${OS_VERSION}" = "3.0" ] && [ "${CPU_ARCH}"
   done
   echo "After dual kernel install:"
   rpm -qa | grep -E "^kernel" | sort
+  grub2-mkconfig -o /boot/grub2/grub.cfg
 fi
 capture_benchmark "${SCRIPT_NAME}_install_kernel_hwe_arm64"
 

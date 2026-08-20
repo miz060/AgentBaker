@@ -4,17 +4,16 @@ Describe '10_azure_nvidia_azurelinux'
     setup() {
         TEST_DIR=$(mktemp -d)
         BOOT_DIR="${TEST_DIR}/boot"
-        GRUB_CONFIG="${BOOT_DIR}/grub2/grub.cfg"
-        mkdir -p "${BOOT_DIR}/grub2" "${TEST_DIR}/bin"
+        GRUB_LINUX_SCRIPT="${TEST_DIR}/10_linux"
+        mkdir -p "${BOOT_DIR}" "${TEST_DIR}/bin"
         touch \
             "${BOOT_DIR}/vmlinuz-6.6.9-1.azl3" \
             "${BOOT_DIR}/vmlinuz-6.6.10-1.azl3" \
             "${BOOT_DIR}/vmlinuz-6.12.8-1.azl3" \
             "${BOOT_DIR}/vmlinuz-6.12.10-1.azl3" \
             "${BOOT_DIR}/vmlinuz-6.20.0-unowned"
-        cat > "${GRUB_CONFIG}" <<'EOF'
-menuentry 'Azure Linux' --id 'gnulinux-6.6.9-1.azl3-advanced-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' {
-}
+        cat > "${GRUB_LINUX_SCRIPT}" <<'EOF'
+    boot_device_id=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
 EOF
         cat > "${TEST_DIR}/bin/rpm" <<'EOF'
 #!/bin/sh
@@ -28,7 +27,7 @@ case "${kernel_path}" in
 esac
 EOF
         chmod +x "${TEST_DIR}/bin/rpm"
-        export BOOT_DIR GRUB_CONFIG
+        export BOOT_DIR GRUB_LINUX_SCRIPT
         PATH="${TEST_DIR}/bin:${PATH}"
         export PATH
     }
@@ -64,5 +63,13 @@ EOF
         The status should be success
         The output should eq ''
         The stderr should include 'Only one kernel variant (HWE or standard) found'
+    End
+
+    It 'emits no override when 10_linux cannot derive a boot device ID'
+        printf '%s\n' 'boot_device_id=' > "${GRUB_LINUX_SCRIPT}"
+        When run script ./parts/linux/cloud-init/artifacts/10_azure_nvidia_azurelinux
+        The status should be success
+        The output should eq ''
+        The stderr should include "Could not determine boot_device_id from ${GRUB_LINUX_SCRIPT}"
     End
 End
