@@ -18,6 +18,7 @@ GIT_BRANCH="$4"
 IMG_SKU="$5"
 FEATURE_FLAGS="$6"
 GIT_COMMIT_HASH="$7"
+AGENTBAKER_REPOSITORY_URL="${8:-https://github.com/Azure/AgentBaker.git}"
 
 systemctl daemon-reload && systemctl restart containerd
 
@@ -101,11 +102,9 @@ if [ "$SKIP_GIT_CLONE" = "true" ]; then
   mv AgentBaker-${GIT_COMMIT_HASH} AgentBaker
 else
   # Clone the AgentBaker repo and checkout the branch provided.
-  echo "Cloning AgentBaker repo and checking out remote branch '${GIT_BRANCH}' into local branch '${LOCAL_GIT_BRANCH}'"
-  COMMAND="git clone --quiet https://github.com/Azure/AgentBaker.git"
-  if ! ${COMMAND}; then
+  echo "Cloning configured AgentBaker repo and checking out remote branch '${GIT_BRANCH}' into local branch '${LOCAL_GIT_BRANCH}'"
+  if ! git clone --quiet "${AGENTBAKER_REPOSITORY_URL}" AgentBaker; then
     err 'git-clone' "Failed to clone AgentBaker repo"
-    err 'git-clone' "Used command '${COMMAND}'"
     exit 1
   fi
   if ! pushd ./AgentBaker; then
