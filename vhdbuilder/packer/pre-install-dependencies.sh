@@ -205,6 +205,37 @@ if isMarinerOrAzureLinux "$OS" && [ "${OS_VERSION}" = "3.0" ] && [ "${CPU_ARCH}"
       exit "$ERR_APT_INSTALL_TIMEOUT"
     fi
   done
+
+  # Azure Linux's signed ARM64 GRUB binary does not embed the smbios module.
+  # Stage the version-matched dynamic module closure under GRUB's boot prefix.
+  dnf_install 30 1 600 grub2-efi || exit "$ERR_APT_INSTALL_TIMEOUT"
+  grub_version=$(rpm -q --queryformat '%{VERSION}-%{RELEASE}' grub2)
+  grub_efi_binary_version=$(rpm -q --queryformat '%{VERSION}-%{RELEASE}' grub2-efi-binary)
+  grub_efi_modules_version=$(rpm -q --queryformat '%{VERSION}-%{RELEASE}' grub2-efi)
+  if [ "$grub_version" != "$grub_efi_binary_version" ] || [ "$grub_version" != "$grub_efi_modules_version" ]; then
+    echo "ARM64 AzureLinux: GRUB package versions do not match: grub2=$grub_version, binary=$grub_efi_binary_version, modules=$grub_efi_modules_version" >&2
+    exit "$ERR_APT_INSTALL_TIMEOUT"
+  fi
+
+  grub_module_source=/usr/lib/grub/arm64-efi
+  grub_module_destination=/boot/grub2/arm64-efi
+  for grub_module_file in extcmd.mod smbios.mod moddep.lst; do
+    if [ ! -s "$grub_module_source/$grub_module_file" ]; then
+      echo "ARM64 AzureLinux: required GRUB file $grub_module_source/$grub_module_file is missing" >&2
+      exit "$ERR_APT_INSTALL_TIMEOUT"
+    fi
+  done
+  if ! grep -q '^smbios: extcmd$' "$grub_module_source/moddep.lst"; then
+    echo "ARM64 AzureLinux: unexpected smbios module dependencies" >&2
+    exit "$ERR_APT_INSTALL_TIMEOUT"
+  fi
+  install -d -m 0755 "$grub_module_destination"
+  install -m 0644 \
+    "$grub_module_source/extcmd.mod" \
+    "$grub_module_source/smbios.mod" \
+    "$grub_module_source/moddep.lst" \
+    "$grub_module_destination/"
+
   echo "After dual kernel install:"
   rpm -qa | grep -E "^kernel" | sort
   grub2-mkconfig -o /boot/grub2/grub.cfg

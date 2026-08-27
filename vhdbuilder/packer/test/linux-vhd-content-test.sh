@@ -838,6 +838,33 @@ testAzureLinuxArm64DualKernel() {
     fi
   done
 
+  local grub_package
+  for grub_package in grub2 grub2-efi-binary grub2-efi; do
+    if ! rpm -q "$grub_package" >/dev/null 2>&1; then
+      err "$test" "$grub_package is not installed"
+    fi
+  done
+
+  local grub_version
+  local grub_efi_binary_version
+  local grub_efi_modules_version
+  grub_version=$(rpm -q --queryformat '%{VERSION}-%{RELEASE}' grub2 2>/dev/null || true)
+  grub_efi_binary_version=$(rpm -q --queryformat '%{VERSION}-%{RELEASE}' grub2-efi-binary 2>/dev/null || true)
+  grub_efi_modules_version=$(rpm -q --queryformat '%{VERSION}-%{RELEASE}' grub2-efi 2>/dev/null || true)
+  if [ -z "$grub_version" ] || [ "$grub_version" != "$grub_efi_binary_version" ] || [ "$grub_version" != "$grub_efi_modules_version" ]; then
+    err "$test" "GRUB package versions do not match: grub2=$grub_version, binary=$grub_efi_binary_version, modules=$grub_efi_modules_version"
+  fi
+
+  local grub_module_file
+  for grub_module_file in extcmd.mod smbios.mod moddep.lst; do
+    if [ ! -s "/boot/grub2/arm64-efi/$grub_module_file" ]; then
+      err "$test" "/boot/grub2/arm64-efi/$grub_module_file is missing or empty"
+    fi
+  done
+  if ! grep -q '^smbios: extcmd$' /boot/grub2/arm64-efi/moddep.lst; then
+    err "$test" "GRUB smbios module dependency metadata is invalid"
+  fi
+
   if [ ! -x /etc/grub.d/10_azure_nvidia ]; then
     err "$test" "/etc/grub.d/10_azure_nvidia is missing or not executable"
   fi
