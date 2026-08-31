@@ -249,6 +249,12 @@ Describe 'cse_install_mariner.sh'
             The status should equal 0
         End
 
+        It 'returns true (0) for GB200 SKU Standard_ND128isr_NDR_GB200_v6'
+            set_mock_sku "Standard_ND128isr_NDR_GB200_v6"
+            When call should_use_nvidia_open_drivers
+            The status should equal 0
+        End
+
         It 'returns true (0) for NVadsA10 SKU Standard_NV36ads_A10_v5'
             set_mock_sku "Standard_NV36ads_A10_v5"
             When call should_use_nvidia_open_drivers
@@ -338,6 +344,39 @@ Describe 'cse_install_mariner.sh'
             When call downloadGPUDrivers
             The output should include "NVIDIA OpenRM driver (cuda-open)"
             The variable GRID_CALLED should not equal "true"
+        End
+
+        It 'selects the exact HWE OpenRM package for GB200 ARM64'
+            NVIDIA_GPU_DRIVER_TYPE="cuda-lts"
+            MOCK_VM_SKU="Standard_ND128isr_NDR_GB200_v6"
+            MOCK_OPEN_RET=0
+            uname() { echo "6.18.38.2-1.azl3"; }
+            dnf() {
+                echo "cuda-open-hwe-580.159.04-1_6.18.38.2.1.azl3.aarch64"
+                echo "cuda-open-hwe-580.159.04-2_6.18.38.2.1.azl3.aarch64"
+                echo "cuda-open-hwe-580.159.04-2_6.12.57.1.1.azl3.aarch64"
+            }
+
+            When call downloadGPUDrivers
+
+            The status should be success
+            The output should include "dnf install 30 1 600 cuda-open-hwe-580.159.04-2_6.18.38.2.1.azl3.aarch64"
+        End
+
+        It 'fails closed when no OpenRM package matches the running HWE kernel'
+            ERR_MISSING_CUDA_PACKAGE=42
+            NVIDIA_GPU_DRIVER_TYPE="cuda-lts"
+            MOCK_VM_SKU="Standard_ND128isr_NDR_GB200_v6"
+            MOCK_OPEN_RET=0
+            uname() { echo "6.18.38.2-1.azl3"; }
+            dnf() {
+                echo "cuda-open-hwe-580.159.04-2_6.12.57.1.1.azl3.aarch64"
+            }
+
+            When run downloadGPUDrivers
+
+            The status should equal 42
+            The output should include "No CUDA package found for kernel 6.18.38.2.1.azl3"
         End
 
         It 'selects proprietary cuda path for T4 when NVIDIA_GPU_DRIVER_TYPE is cuda'

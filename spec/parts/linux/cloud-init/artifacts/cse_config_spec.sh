@@ -2909,6 +2909,78 @@ OVERRIDE_EOF
         End
     End
 
+    Describe 'ARM64 GPU driver orchestration'
+        isARM64() { echo 1; }
+        logs_to_events() {
+            shift
+            "$@"
+        }
+        configGPUDrivers() { echo "configGPUDrivers called"; }
+        validateGPUDrivers() { echo "validateGPUDrivers called"; }
+
+        OS="AZURELINUX"
+        UBUNTU_OS_NAME="UBUNTU"
+
+        It 'configures drivers instead of skipping an ARM64 GPU node'
+            CONFIG_GPU_DRIVER_IF_NEEDED=true
+
+            When call ensureGPUDrivers
+
+            The status should be success
+            The output should equal "configGPUDrivers called"
+        End
+
+        It 'validates drivers instead of skipping an ARM64 GPU node'
+            CONFIG_GPU_DRIVER_IF_NEEDED=false
+
+            When call ensureGPUDrivers
+
+            The status should be success
+            The output should equal "validateGPUDrivers called"
+        End
+
+        It 'keeps the ARM64 path scoped to Mariner and Azure Linux'
+            OS="UBUNTU"
+            CONFIG_GPU_DRIVER_IF_NEEDED=true
+
+            When call ensureGPUDrivers
+
+            The status should be success
+            The output should equal ""
+        End
+
+        It 'continues skipping the ARM64 path on ACL'
+            OS="$AZURELINUX_OS_NAME"
+            OS_VARIANT="$ACL_OS_VARIANT"
+            CONFIG_GPU_DRIVER_IF_NEEDED=true
+
+            When call ensureGPUDrivers
+
+            The status should be success
+            The output should equal ""
+        End
+    End
+
+    Describe 'ARM64 GPU driver validation'
+        isARM64() { echo 1; }
+        retrycmd_if_failure() {
+            echo "retrycmd_if_failure $*" >&2
+            return 0
+        }
+        which() { return 0; }
+        configGPUDrivers() { return 1; }
+
+        It 'does not skip modprobe and nvidia-smi validation on ARM64'
+            When call validateGPUDrivers
+
+            The status should be success
+            The output should include "gpu driver loaded"
+            The output should include "gpu driver working fine"
+            The stderr should include "retrycmd_if_failure 24 5 25 nvidia-modprobe -u -c0"
+            The stderr should include "retrycmd_if_failure 24 5 30 nvidia-smi"
+        End
+    End
+
     Describe 'configGPUDrivers'
         # Assert the per-step CSE timing event names emitted via logs_to_events,
         # without running the real (hardware/daemon) driver steps. logs_to_events

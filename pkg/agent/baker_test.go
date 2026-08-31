@@ -1119,6 +1119,16 @@ var _ = Describe("GetAKSGPUImageSHA", func() {
 	})
 })
 
+var _ = Describe("GB200 GPU configuration", func() {
+	It("should use CUDA LTS without Fabric Manager", func() {
+		vmSize := "Standard_ND128isr_NDR_GB200_v6"
+
+		Expect(GetGPUDriverType(vmSize)).To(Equal("cuda-lts"))
+		Expect(GetGPUDriverVersion(vmSize)).To(Equal(datamodel.NvidiaCudaLTSDriverVersion))
+		Expect(GPUNeedsFabricManager(vmSize)).To(BeFalse())
+	})
+})
+
 var _ = Describe("getLinuxNodeCSECommand", func() {
 	var (
 		templateGenerator *TemplateGenerator
