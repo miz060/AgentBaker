@@ -811,7 +811,7 @@ testAzureLinuxArm64DualKernel() {
   local enable_fips=$3
 
   echo "$test:Start"
-  if [ "$os_sku" != "AzureLinux" ] || [ "$os_version" != "3.0" ] || [ "${enable_fips,,}" = "true" ] || [ "$(getCPUArch)" != "arm64" ]; then
+  if [ "$os_version" != "3.0" ] || [ "${enable_fips,,}" = "true" ] || ! isAzureLinuxArm64BaseImage "${os_sku^^}" "$(getCPUArch)" "$OS_VARIANT"; then
     echo "$test: Skipping for non-FIPS AzureLinux 3 ARM64 image"
     return
   fi
