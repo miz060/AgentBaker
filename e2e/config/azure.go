@@ -16,8 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/agentbaker/e2e/toolkit"
-
+	"github.com/Azure/agentbaker/e2e/logging"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -82,13 +81,10 @@ type AzureClient struct {
 	ResourceSKUs              *armcompute.ResourceSKUsClient
 }
 
-func mustNewAzureClient() *AzureClient {
-	client, err := NewAzureClient()
-	if err != nil {
-		panic(err)
-	}
-	return client
-
+// PollUntilDoneOptions returns independent options for each ARM operation.
+// The 15-second default avoids ARM throttling across concurrent scenarios.
+func PollUntilDoneOptions() *runtime.PollUntilDoneOptions {
+	return &runtime.PollUntilDoneOptions{Frequency: Config.DefaultPollInterval}
 }
 
 func NewHttpClient() *http.Client {
@@ -448,7 +444,7 @@ func (a *AzureClient) createBlobStorageAccount(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("create storage account: %w", err)
 	}
-	_, err = poller.PollUntilDone(ctx, DefaultPollUntilDoneOptions)
+	_, err = poller.PollUntilDone(ctx, PollUntilDoneOptions())
 	if err != nil {
 		return fmt.Errorf("create storage account: %w", err)
 	}
@@ -570,7 +566,7 @@ func getCurrentPrincipalID(ctx context.Context, cred azcore.TokenCredential) (st
 }
 
 func (a *AzureClient) LatestSIGImageVersionByTag(ctx context.Context, image *Image, tagName, tagValue, location string) (VHDResourceID, error) {
-	toolkit.Logf(ctx, "Looking up images in %s", image.azurePortalImageUrl())
+	logging.Logf(ctx, "Looking up images in %s", image.azurePortalImageUrl())
 
 	imagesClient, imagesClientErr := armcompute.NewGalleryImagesClient(image.Gallery.SubscriptionID, a.Credential, a.ArmOptions)
 	if imagesClientErr != nil {
@@ -602,7 +598,7 @@ func (a *AzureClient) LatestSIGImageVersionByTag(ctx context.Context, image *Ima
 			// skip images tagged with the no-selection tag, indicating they
 			// shouldn't be selected dynmically for running abe2e scenarios
 			if _, ok := version.Tags[noSelectionTagName]; ok {
-				toolkit.Logf(ctx, "Skipping version %s as it has no selection tag %s", *version.ID, noSelectionTagName)
+				logging.Logf(ctx, "Skipping version %s as it has no selection tag %s", *version.ID, noSelectionTagName)
 				continue
 			}
 
@@ -623,7 +619,7 @@ func (a *AzureClient) LatestSIGImageVersionByTag(ctx context.Context, image *Ima
 			}
 
 			if *version.Properties.ProvisioningState != armcompute.GalleryProvisioningStateSucceeded && *version.Properties.ProvisioningState != armcompute.GalleryProvisioningStateUpdating {
-				toolkit.Logf(ctx, "Skipping version %s with tag %s=%s due to %s", *version.ID, tagName, tagValue, err)
+				logging.Logf(ctx, "Skipping version %s with tag %s=%s due to %s", *version.ID, tagName, tagValue, err)
 				continue
 			}
 
@@ -637,7 +633,7 @@ func (a *AzureClient) LatestSIGImageVersionByTag(ctx context.Context, image *Ima
 	}
 
 	if latestVersion == nil {
-		toolkit.Logf(ctx, "Could not find VHD with tag %s=%s in %s",
+		logging.Logf(ctx, "Could not find VHD with tag %s=%s in %s",
 			tagName,
 			tagValue,
 			image.azurePortalImageUrl())
@@ -659,21 +655,21 @@ func (a *AzureClient) ensureReplication(ctx context.Context, image *Image, versi
 	}
 
 	if replicatedToCurrentRegion(version, location) {
-		toolkit.Logf(ctx, "Image version %s is already in region %s", *version.ID, location)
+		logging.Logf(ctx, "Image version %s is already in region %s", *version.ID, location)
 		return nil
 	}
 	regions := make([]string, 0, len(version.Properties.PublishingProfile.TargetRegions))
 	for _, targetRegion := range version.Properties.PublishingProfile.TargetRegions {
 		regions = append(regions, *targetRegion.Name)
 	}
-	toolkit.Logf(ctx, "Replicating to region %s, available regions: %s, image version %s", location, strings.Join(regions, ", "), *version.ID)
-	toolkit.Logf(ctx, "##vso[task.logissue type=warning;]Replicating to region %s", location)
+	logging.Logf(ctx, "Replicating to region %s, available regions: %s, image version %s", location, strings.Join(regions, ", "), *version.ID)
+	logging.Logf(ctx, "##vso[task.logissue type=warning;]Replicating to region %s", location)
 
 	start := time.Now() // Record the start time
 	err := a.replicateImageVersionToCurrentRegion(ctx, image, version, location)
 	elapsed := time.Since(start) // Calculate the elapsed time
 
-	toolkit.LogDuration(ctx, elapsed, 3*time.Minute, fmt.Sprintf("Replication took: %s (%s)", elapsed, *version.ID))
+	logging.LogDuration(ctx, elapsed, 3*time.Minute, fmt.Sprintf("Replication took: %s (%s)", elapsed, *version.ID))
 
 	return err
 }
@@ -684,7 +680,7 @@ func (a *AzureClient) waitForVersionOperationCompletion(ctx context.Context, ima
 		return nil
 	}
 
-	toolkit.Logf(ctx, "Image version %s is in 'Updating' state, waiting for operation to complete", *version.ID)
+	logging.Logf(ctx, "Image version %s is in 'Updating' state, waiting for operation to complete", *version.ID)
 
 	imgVersionClient, err := armcompute.NewGalleryImageVersionsClient(image.Gallery.SubscriptionID, a.Credential, a.ArmOptions)
 	if err != nil {
@@ -704,14 +700,14 @@ func (a *AzureClient) waitForVersionOperationCompletion(ctx context.Context, ima
 		currentState := *resp.Properties.ProvisioningState
 		// Only log if state has changed
 		if currentState != lastLoggedState {
-			toolkit.Logf(ctx, "Image version %s current state: %s", *version.ID, currentState)
+			logging.Logf(ctx, "Image version %s current state: %s", *version.ID, currentState)
 			lastLoggedState = currentState
 		}
 
 		// Check if operation completed
 		if currentState != armcompute.GalleryProvisioningStateUpdating {
 			if currentState == armcompute.GalleryProvisioningStateSucceeded {
-				toolkit.Logf(ctx, "Image version %s operation completed successfully", *version.ID)
+				logging.Logf(ctx, "Image version %s operation completed successfully", *version.ID)
 				// Update the version object with the latest state
 				*version = resp.GalleryImageVersion
 				return true, nil // Done successfully
@@ -747,7 +743,7 @@ func (a *AzureClient) replicateImageVersionToCurrentRegion(ctx context.Context, 
 	if err != nil {
 		return fmt.Errorf("begin updating image version target regions: %w", err)
 	}
-	if _, err := resp.PollUntilDone(ctx, DefaultPollUntilDoneOptions); err != nil {
+	if _, err := resp.PollUntilDone(ctx, PollUntilDoneOptions()); err != nil {
 		return fmt.Errorf("updating image version target regions: %w", err)
 	}
 
@@ -759,7 +755,7 @@ func (a *AzureClient) EnsureSIGImageVersion(ctx context.Context, image *Image, l
 	if err != nil {
 		return "", fmt.Errorf("create a new images client: %v", err)
 	}
-	toolkit.Logf(ctx, "Looking up images for gallery subscription %s resource group %s gallery name %s image name %s version %s ",
+	logging.Logf(ctx, "Looking up images for gallery subscription %s resource group %s gallery name %s image name %s version %s ",
 		image.Gallery.SubscriptionID,
 		image.Gallery.ResourceGroupName,
 		image.Gallery.Name,
@@ -816,9 +812,16 @@ func replicatedToCurrentRegion(version *armcompute.GalleryImageVersion, location
 }
 
 // DeleteSIGImageVersion deletes a SIG image version
-func (a *AzureClient) DeleteSIGImageVersion(ctx context.Context, galleryResourceGroup, galleryName, imageName, version string) {
-	// Ignore errors because the stage-2 VMSS deletion can still be in progress.
-	_, _ = a.GalleryImageVersions.BeginDelete(ctx, galleryResourceGroup, galleryName, imageName, version, nil)
+func (a *AzureClient) DeleteSIGImageVersion(ctx context.Context, galleryResourceGroup, galleryName, imageName, version string) error {
+	_, err := a.GalleryImageVersions.BeginDelete(ctx, galleryResourceGroup, galleryName, imageName, version, nil)
+	if err != nil {
+		var responseError *azcore.ResponseError
+		if errors.As(err, &responseError) && responseError.StatusCode == http.StatusNotFound {
+			return nil
+		}
+		return fmt.Errorf("begin deleting gallery image version %s/%s/%s: %w", galleryName, imageName, version, err)
+	}
+	return nil
 }
 
 // DeleteDisk deletes a managed disk
@@ -833,7 +836,7 @@ func (a *AzureClient) DeleteDisk(ctx context.Context, resourceGroupName, diskNam
 		return fmt.Errorf("failed to delete disk: %w", err)
 	}
 
-	_, err = deleteOp.PollUntilDone(ctx, DefaultPollUntilDoneOptions)
+	_, err = deleteOp.PollUntilDone(ctx, PollUntilDoneOptions())
 	if err != nil {
 		return fmt.Errorf("failed to complete disk deletion: %w", err)
 	}
@@ -848,7 +851,7 @@ func (a *AzureClient) DeleteSnapshot(ctx context.Context, resourceGroupName, sna
 		return fmt.Errorf("failed to delete snapshot: %w", err)
 	}
 
-	_, err = deleteOp.PollUntilDone(ctx, DefaultPollUntilDoneOptions)
+	_, err = deleteOp.PollUntilDone(ctx, PollUntilDoneOptions())
 	if err != nil {
 		return fmt.Errorf("failed to complete snapshot deletion: %w", err)
 	}
@@ -908,7 +911,7 @@ type vmExtensionVersion struct {
 func parseVersion(ctx context.Context, v *armcompute.VirtualMachineExtensionImage) vmExtensionVersion {
 	version := vmExtensionVersion{original: v}
 	if v.Name == nil {
-		toolkit.Logf(ctx, "warning: VM extension image has nil name, skipping version parse")
+		logging.Logf(ctx, "warning: VM extension image has nil name, skipping version parse")
 		return version
 	}
 
@@ -919,21 +922,21 @@ func parseVersion(ctx context.Context, v *armcompute.VirtualMachineExtensionImag
 		if major, err := strconv.Atoi(parts[0]); err == nil {
 			version.major = major
 		} else {
-			toolkit.Logf(ctx, "warning: failed to parse major version from %q: %v", *v.Name, err)
+			logging.Logf(ctx, "warning: failed to parse major version from %q: %v", *v.Name, err)
 		}
 	}
 	if len(parts) >= 2 {
 		if minor, err := strconv.Atoi(parts[1]); err == nil {
 			version.minor = minor
 		} else {
-			toolkit.Logf(ctx, "warning: failed to parse minor version from %q: %v", *v.Name, err)
+			logging.Logf(ctx, "warning: failed to parse minor version from %q: %v", *v.Name, err)
 		}
 	}
 	if len(parts) >= 3 {
 		if patch, err := strconv.Atoi(parts[2]); err == nil {
 			version.patch = patch
 		} else {
-			toolkit.Logf(ctx, "warning: failed to parse patch version from %q: %v", *v.Name, err)
+			logging.Logf(ctx, "warning: failed to parse patch version from %q: %v", *v.Name, err)
 		}
 	}
 
