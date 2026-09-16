@@ -17,13 +17,11 @@ CLUSTER_CA_CERT="/etc/kubernetes/certs/ca.crt"
 # functions defined until "${__SOURCED__:+return}" are sourced and tested in -
 # spec/parts/linux/cloud-init/artifacts/mariner-package-update_spec.sh.
 # -------------------------------------------------------------------------------------------------
-# Kernel RPMs regenerate grub.cfg; refresh the module files AgentBaker copied outside RPM ownership.
 reconcileDualKernelBoot() {
     local boot_dir="${BOOT_DIR:-/boot}"
     local module_source="${GRUB_MODULE_SOURCE:-/usr/lib/grub/arm64-efi}"
-    local module_destination="${boot_dir}/grub2/arm64-efi"
     local grub_config="${boot_dir}/grub2/grub.cfg"
-    local kernel_package kernel_version grub_versions module
+    local kernel_package kernel_version grub_versions
     local kernel_versions=()
 
     for kernel_package in kernel kernel-hwe; do
@@ -39,13 +37,11 @@ reconcileDualKernelBoot() {
         echo "Dual-kernel image has mismatched GRUB packages" >&2
         return 1
     fi
-    for module in extcmd.mod smbios.mod moddep.lst; do
-        [ -s "${module_source}/${module}" ] || { echo "Missing GRUB module file: ${module_source}/${module}" >&2; return 1; }
-    done
-    grep -q '^smbios: extcmd$' "${module_source}/moddep.lst" || { echo "Unexpected smbios module dependencies" >&2; return 1; }
+    if [ ! -s "${module_source}/smbios.mod" ]; then
+        echo "Missing GRUB module file: ${module_source}/smbios.mod" >&2
+        return 1
+    fi
 
-    install -d -m 0755 "$module_destination" || return 1
-    install -m 0644 "${module_source}/extcmd.mod" "${module_source}/smbios.mod" "${module_source}/moddep.lst" "$module_destination/" || return 1
     grub2-mkconfig -o "$grub_config" || return 1
     grub2-script-check "$grub_config" || return 1
     for kernel_version in "${kernel_versions[@]}"; do

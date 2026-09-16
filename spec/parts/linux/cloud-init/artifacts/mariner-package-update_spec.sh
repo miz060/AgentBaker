@@ -364,7 +364,7 @@ EOF
             The contents of file "${SECURITY_PATCH_REPO_DIR}/azurelinux-official-base.repo" should eq "${repo_config}"
         End
 
-        It 'should reconcile dual-kernel boot files after updating all packages'
+        It 'should reconcile dual-kernel boot files without copying package-owned modules'
             export DUAL_KERNEL=true
             export BOOT_DIR="${TEST_DIR}/boot"
             export GRUB_MODULE_SOURCE="${TEST_DIR}/grub-modules"
@@ -390,9 +390,7 @@ EOF
                 "${BOOT_DIR}/initramfs-${MOCK_HWE_VERSION}.img"; do
                 echo "boot" > "$boot_file"
             done
-            echo "extcmd" > "${GRUB_MODULE_SOURCE}/extcmd.mod"
             echo "smbios" > "${GRUB_MODULE_SOURCE}/smbios.mod"
-            echo "smbios: extcmd" > "${GRUB_MODULE_SOURCE}/moddep.lst"
 
             When run main
             The status should be success
@@ -400,9 +398,8 @@ EOF
             The output should include "grub2-mkconfig mock called"
             The output should include "grub2-script-check mock called"
             The output should include "Executed dnf update -y --refresh 1 times"
-            The contents of file "${BOOT_DIR}/grub2/arm64-efi/extcmd.mod" should eq "extcmd"
-            The contents of file "${BOOT_DIR}/grub2/arm64-efi/smbios.mod" should eq "smbios"
-            The contents of file "${BOOT_DIR}/grub2/arm64-efi/moddep.lst" should eq "smbios: extcmd"
+            The contents of file "${GRUB_MODULE_SOURCE}/smbios.mod" should eq "smbios"
+            The path "${BOOT_DIR}/grub2/arm64-efi" should not be exist
         End
 
         It 'should update successfully for ni cluster'

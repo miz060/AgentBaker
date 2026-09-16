@@ -175,9 +175,8 @@ capture_benchmark "${SCRIPT_NAME}_disable_kernel_lockdown_cmdline"
 installAzureLinuxArm64DualKernel() {
   local boot_dir="$1"
   local grub_module_source="$2"
-  local grub_module_destination="${boot_dir}/grub2/arm64-efi"
   local grub_version grub_efi_binary_version grub_efi_modules_version
-  local kernel_package grub_module_file
+  local kernel_package
 
   if ! rpm -q kernel-hwe &>/dev/null; then
     dnf_install 30 1 600 kernel-hwe || return 1
@@ -190,9 +189,6 @@ installAzureLinuxArm64DualKernel() {
     fi
   done
 
-  # The signed ARM64 EFI binary does not embed smbios, and grub2-efi installs
-  # its dynamic modules outside the boot prefix. Stage the required closure
-  # until Azure Linux provides smbios at boot directly.
   dnf_install 30 1 600 grub2-efi || return 1
   grub_version=$(rpm -q --queryformat '%{VERSION}-%{RELEASE}' grub2) || return 1
   grub_efi_binary_version=$(rpm -q --queryformat '%{VERSION}-%{RELEASE}' grub2-efi-binary) || return 1
@@ -202,22 +198,10 @@ installAzureLinuxArm64DualKernel() {
     return 1
   fi
 
-  for grub_module_file in extcmd.mod smbios.mod moddep.lst; do
-    if [ ! -s "$grub_module_source/$grub_module_file" ]; then
-      echo "ARM64 Azure Linux: required GRUB file $grub_module_source/$grub_module_file is missing" >&2
-      return 1
-    fi
-  done
-  if ! grep -q '^smbios: extcmd$' "$grub_module_source/moddep.lst"; then
-    echo "ARM64 Azure Linux: unexpected smbios module dependencies" >&2
+  if [ ! -s "$grub_module_source/smbios.mod" ]; then
+    echo "ARM64 Azure Linux: required GRUB file $grub_module_source/smbios.mod is missing" >&2
     return 1
   fi
-  install -d -m 0755 "$grub_module_destination" || return 1
-  install -m 0644 \
-    "$grub_module_source/extcmd.mod" \
-    "$grub_module_source/smbios.mod" \
-    "$grub_module_source/moddep.lst" \
-    "$grub_module_destination/" || return 1
 
   grub2-mkconfig -o "${boot_dir}/grub2/grub.cfg"
 }

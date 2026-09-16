@@ -11,10 +11,8 @@ Describe 'installAzureLinuxArm64DualKernel'
     MOCK_KERNEL_HWE_INSTALLED=false
     MOCK_GRUB_EFI_BINARY_VERSION="2.06-27.azl3"
 
-    mkdir -p "$GRUB_MODULE_SOURCE"
-    echo "extcmd" > "$GRUB_MODULE_SOURCE/extcmd.mod"
+    mkdir -p "$GRUB_MODULE_SOURCE" "$BOOT_DIR/grub2"
     echo "smbios" > "$GRUB_MODULE_SOURCE/smbios.mod"
-    echo "smbios: extcmd" > "$GRUB_MODULE_SOURCE/moddep.lst"
   }
 
   cleanup_dual_kernel() {
@@ -54,27 +52,26 @@ Describe 'installAzureLinuxArm64DualKernel'
   BeforeEach 'setup_dual_kernel'
   AfterEach 'cleanup_dual_kernel'
 
-  It 'installs HWE and stages the GRUB module closure'
+  It 'installs HWE and package-owned GRUB modules without staging copies'
     When call installAzureLinuxArm64DualKernel "$BOOT_DIR" "$GRUB_MODULE_SOURCE"
 
     The status should be success
     The output should include "dnf_install 30 1 600 kernel-hwe"
     The output should include "dnf_install 30 1 600 grub2-efi"
     The output should include "grub2-mkconfig -o ${BOOT_DIR}/grub2/grub.cfg"
-    The contents of file "${BOOT_DIR}/grub2/arm64-efi/extcmd.mod" should equal "extcmd"
-    The contents of file "${BOOT_DIR}/grub2/arm64-efi/smbios.mod" should equal "smbios"
-    The contents of file "${BOOT_DIR}/grub2/arm64-efi/moddep.lst" should equal "smbios: extcmd"
+    The contents of file "${GRUB_MODULE_SOURCE}/smbios.mod" should equal "smbios"
+    The path "${BOOT_DIR}/grub2/arm64-efi" should not be exist
   End
 
   Parameters
     "mismatched GRUB versions"  "GRUB package versions do not match"
-    "invalid module dependency" "unexpected smbios module dependencies"
+    "missing SMBIOS module" "smbios.mod is missing"
   End
 
   It "rejects $1"
     case "$1" in
       "mismatched GRUB versions") MOCK_GRUB_EFI_BINARY_VERSION="2.06-28.azl3" ;;
-      "invalid module dependency") echo "smbios:" > "$GRUB_MODULE_SOURCE/moddep.lst" ;;
+      "missing SMBIOS module") rm "$GRUB_MODULE_SOURCE/smbios.mod" ;;
     esac
 
     When call installAzureLinuxArm64DualKernel "$BOOT_DIR" "$GRUB_MODULE_SOURCE"
